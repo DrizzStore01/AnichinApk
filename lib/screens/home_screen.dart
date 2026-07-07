@@ -5,6 +5,7 @@ import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/anime_card_widget.dart';
 import '../widgets/featured_slider.dart';
+import '../widgets/pill_header.dart';
 import '../widgets/section_header.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -55,11 +56,14 @@ class _HomeScreenState extends State<HomeScreen> {
               parent: AlwaysScrollableScrollPhysics(),
             ),
             slivers: [
-              const CupertinoSliverNavigationBar(
-                backgroundColor: AppColors.background,
-                border: null,
-                largeTitle: Text('Anichin', style: AppText.largeTitle),
-                stretch: true,
+              SliverPersistentHeader(
+                pinned: true,
+                delegate: PillHeaderDelegate(
+                  topPadding: MediaQuery.of(context).padding.top,
+                  onSearchTap: () {
+                    // TODO: buka halaman search
+                  },
+                ),
               ),
               CupertinoSliverRefreshControl(onRefresh: _refresh),
               SliverToBoxAdapter(
@@ -98,6 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         width: 128,
                         child: AnimeCardWidget(
                           anime: anime,
+                          titleInsideCard: true,
                           onTap: () {
                             // TODO: navigate ke detail page pakai anime.url
                           },
@@ -213,7 +218,7 @@ class _ErrorState extends StatelessWidget {
               child: const Text(
                 'Coba Lagi',
                 style: TextStyle(
-                  color: Colors.black,
+                  color: Colors.white,
                   fontWeight: FontWeight.w600,
                 ),
               ),

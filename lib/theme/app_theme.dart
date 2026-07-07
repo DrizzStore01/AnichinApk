@@ -10,9 +10,9 @@ class AppColors {
   static const surfaceElevated = Color(0xFF1F1F26);
   static const divider = Color(0xFF232329);
 
-  // Aksen emas/amber — nyambung sama tema xianxia/wuxia (api, pedang, dll)
-  static const accent = Color(0xFFE3A657);
-  static const accentDim = Color(0xFF9C7A4A);
+  // Aksen biru — dipakai di teks aksi, label/badge, dan search icon
+  static const accent = Color(0xFF0A84FF);
+  static const accentDim = Color(0xFF3D6FA8);
 
   static const textPrimary = Color(0xFFF5F5F7);
   static const textSecondary = Color(0xFF9A9AA4);
@@ -21,13 +21,6 @@ class AppColors {
 
 class AppText {
   AppText._();
-
-  static const largeTitle = TextStyle(
-    color: AppColors.textPrimary,
-    fontSize: 30,
-    fontWeight: FontWeight.w700,
-    letterSpacing: -0.6,
-  );
 
   static const navTitle = TextStyle(
     color: AppColors.textPrimary,
