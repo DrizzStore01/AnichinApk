@@ -8,6 +8,7 @@ import '../widgets/featured_slider.dart';
 import '../widgets/pill_header.dart';
 import '../widgets/section_header.dart';
 import 'detail_screen.dart';
+import 'watch_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -152,7 +153,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           Navigator.of(context).push(
                             MaterialPageRoute(
                               builder: (_) =>
-                                  DetailScreen(animeUrl: anime.url),
+                                  WatchScreen(episodeUrl: anime.url),
                             ),
                           );
                         },

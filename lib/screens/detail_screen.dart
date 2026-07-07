@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/detail_model.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import 'watch_screen.dart';
 
 class DetailScreen extends StatefulWidget {
   /// Url halaman seri di anichin.cafe (bukan url episode).
@@ -134,7 +135,12 @@ class _DetailScreenState extends State<DetailScreen> {
                       return _EpisodeTile(
                         episode: ep,
                         onTap: () {
-                          // TODO: navigate ke halaman watch pakai ep.url
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  WatchScreen(episodeUrl: ep.url),
+                            ),
+                          );
                         },
                       );
                     },
