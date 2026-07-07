@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import '../models/home_model.dart';
 import '../models/detail_model.dart';
 import '../models/watch_model.dart';
+import '../models/search_model.dart';
 
 class ApiService {
   static const String baseUrl = 'https://api.nexray.eu.cc/anime/anichin';
@@ -55,6 +56,26 @@ class ApiService {
 
       if (jsonData['status'] == true) {
         return WatchData.fromJson(jsonData);
+      } else {
+        throw Exception('API mengembalikan status false');
+      }
+    } else {
+      throw Exception('Gagal fetch data. Kode: ${response.statusCode}');
+    }
+  }
+
+  /// [query] kata kunci pencarian, [page] buat pagination (default 1).
+  Future<SearchData> search(String query, {int page = 1}) async {
+    final encodedQuery = Uri.encodeQueryComponent(query);
+    final response = await http.get(
+      Uri.parse('$baseUrl/search?q=$encodedQuery&page=$page'),
+    );
+
+    if (response.statusCode == 200) {
+      final Map<String, dynamic> jsonData = json.decode(response.body);
+
+      if (jsonData['status'] == true) {
+        return SearchData.fromJson(jsonData);
       } else {
         throw Exception('API mengembalikan status false');
       }

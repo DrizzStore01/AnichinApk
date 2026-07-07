@@ -28,6 +28,8 @@ class AnimeCard {
   final String url;
   final String thumbnail;
   final String? status;
+  // Cuma keisi kalau datanya dari hasil search ("Sub"/"Dub").
+  final String? sub;
 
   AnimeCard({
     required this.title,
@@ -36,6 +38,7 @@ class AnimeCard {
     required this.url,
     required this.thumbnail,
     this.status,
+    this.sub,
   });
 
   factory AnimeCard.fromJson(Map<String, dynamic> json) {
@@ -47,6 +50,7 @@ class AnimeCard {
       url: json['url'] ?? '',
       thumbnail: json['thumbnail'] ?? '',
       status: json['status'],
+      sub: json['sub'],
     );
   }
 }

@@ -8,6 +8,7 @@ import '../widgets/featured_slider.dart';
 import '../widgets/pill_header.dart';
 import '../widgets/section_header.dart';
 import 'detail_screen.dart';
+import 'search_screen.dart';
 import 'watch_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -63,7 +64,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 delegate: PillHeaderDelegate(
                   topPadding: MediaQuery.of(context).padding.top,
                   onSearchTap: () {
-                    // TODO: buka halaman search
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SearchScreen()),
+                    );
                   },
                 ),
               ),
