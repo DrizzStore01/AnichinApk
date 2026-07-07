@@ -11,6 +11,11 @@ workflows:
         script: |
           sed -i.bak 's/android:label="[^"]*"/android:label="Anichin Beta"/' android/app/src/main/AndroidManifest.xml
           rm -f android/app/src/main/AndroidManifest.xml.bak
+      - name: Add INTERNET permission for release build
+        script: |
+          if ! grep -q "android.permission.INTERNET" android/app/src/main/AndroidManifest.xml; then
+            perl -i -pe 's/(<manifest[^>]*>)/$1\n    <uses-permission android:name="android.permission.INTERNET"\/>/' android/app/src/main/AndroidManifest.xml
+          fi
       - name: Get Flutter packages
         script: flutter pub get
       - name: Build APK
