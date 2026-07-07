@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:carousel_slider/carousel_slider.dart';
 import '../models/home_model.dart';
 import '../services/api_service.dart';
 import '../widgets/anime_card_widget.dart';
+import '../widgets/featured_slider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -69,55 +69,11 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 // ---- Featured Slider ----
                 if (data.featuredSlider.isNotEmpty)
-                  CarouselSlider(
-                    options: CarouselOptions(
-                      height: 200,
-                      autoPlay: true,
-                      viewportFraction: 0.9,
-                      enlargeCenterPage: true,
-                    ),
-                    items: data.featuredSlider.map((item) {
-                      return GestureDetector(
-                        onTap: () {
-                          // TODO: navigate ke detail page pakai item.url
-                        },
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              Image.network(item.thumbnail, fit: BoxFit.cover),
-                              Positioned(
-                                bottom: 0,
-                                left: 0,
-                                right: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      begin: Alignment.bottomCenter,
-                                      end: Alignment.topCenter,
-                                      colors: [
-                                        Colors.black.withOpacity(0.85),
-                                        Colors.transparent,
-                                      ],
-                                    ),
-                                  ),
-                                  child: Text(
-                                    item.title,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
+                  FeaturedSlider(
+                    items: data.featuredSlider,
+                    onTap: (item) {
+                      // TODO: navigate ke detail page pakai item.url
+                    },
                   ),
 
                 const SizedBox(height: 16),

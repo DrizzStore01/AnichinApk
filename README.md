@@ -73,6 +73,10 @@ codemagic.yaml
 
 ## Catatan
 
+- Featured slider di home screen dibuat manual pakai `PageView` bawaan Flutter
+  (bukan package `carousel_slider`), karena package tersebut masih bentrok
+  nama class `CarouselController` dengan widget bawaan Flutter versi baru
+  dan belum ada fix resminya di pub.dev.
 - Halaman detail anime & video player belum dibuat, baru home screen.
 - Signing APK masih pakai debug key bawaan Flutter (belum pakai keystore
   sendiri). Untuk rilis ke Play Store, perlu bikin keystore sendiri dan
