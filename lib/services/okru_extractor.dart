@@ -33,17 +33,16 @@ class OkRuExtractor {
 
     final html = response.body;
 
-    // data-options="{... berisi videoId ...}" — dicari yang paling deket
-    // sama videoId biar dapet blok JSON yang bener.
-    final optionsMatch = RegExp(
-      'data-options=(["\'])(\\{.*?$videoId.*?\\})\\1',
-      dotAll: true,
-    ).firstMatch(html);
+    // Attribute-nya "data-options="{...semua di-HTML-escape...}"" — gak ada
+    // tanda kutip mentah di dalem value-nya (semua udah jadi &quot;), jadi
+    // aman diambil sekaligus sampe kutip penutup pertama.
+    final optionsMatch =
+        RegExp(r'data-options="([^"]*)"').firstMatch(html);
     if (optionsMatch == null) return null;
 
     Map<String, dynamic>? player;
     try {
-      player = json.decode(_htmlUnescape(optionsMatch.group(2)!));
+      player = json.decode(_htmlUnescape(optionsMatch.group(1)!));
     } catch (_) {
       return null;
     }
