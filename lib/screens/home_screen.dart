@@ -7,6 +7,7 @@ import '../widgets/anime_card_widget.dart';
 import '../widgets/featured_slider.dart';
 import '../widgets/pill_header.dart';
 import '../widgets/section_header.dart';
+import 'detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -72,7 +73,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: FeaturedSlider(
                     items: data.featuredSlider,
                     onTap: (item) {
-                      // TODO: navigate ke detail page pakai item.url
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => DetailScreen(animeUrl: item.url),
+                        ),
+                      );
                     },
                   ),
                 ),
@@ -104,7 +109,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           anime: anime,
                           titleInsideCard: true,
                           onTap: () {
-                            // TODO: navigate ke detail page pakai anime.url
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    DetailScreen(animeUrl: anime.url),
+                              ),
+                            );
                           },
                         ),
                       );
@@ -139,7 +149,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       return AnimeCardWidget(
                         anime: anime,
                         onTap: () {
-                          // TODO: navigate ke detail page pakai anime.url
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  DetailScreen(animeUrl: anime.url),
+                            ),
+                          );
                         },
                       );
                     },
