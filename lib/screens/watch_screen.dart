@@ -2,8 +2,11 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
 import '../models/watch_model.dart';
 import '../services/api_service.dart';
+import '../services/okru_extractor.dart';
 import '../theme/app_theme.dart';
 
 class WatchScreen extends StatefulWidget {
@@ -20,28 +23,145 @@ class _WatchScreenState extends State<WatchScreen> {
   final ApiService _apiService = ApiService();
   late Future<WatchData> _futureWatch;
 
+  // WebView (dipake buat server selain OK.ru, atau kalau extract OK.ru gagal).
   WebViewController? _playerController;
+
+  // Native player (dipake kalau berhasil extract direct url dari OK.ru).
+  VideoPlayerController? _videoController;
+  ChewieController? _chewieController;
+
   int _selectedServerIndex = 0;
   String? _loadedLink;
+  bool _isNative = false;
+  bool _extracting = false;
 
   @override
   void initState() {
     super.initState();
-    _futureWatch = _apiService.getStream(widget.episodeUrl);
+    _futureWatch = _apiService.getStream(widget.episodeUrl)
+      ..then((data) {
+        if (mounted && data.streamingLinks.isNotEmpty) {
+          _loadServer(data.streamingLinks.first, 0);
+        }
+      });
   }
 
-  void _loadServer(StreamingLink server, int index) {
+  @override
+  void dispose() {
+    _chewieController?.dispose();
+    _videoController?.dispose();
+    super.dispose();
+  }
+
+  void _disposeNativePlayer() {
+    _chewieController?.dispose();
+    _videoController?.dispose();
+    _chewieController = null;
+    _videoController = null;
+  }
+
+  Future<void> _loadServer(StreamingLink server, int index) async {
     if (_loadedLink == server.link) return;
 
+    _loadedLink = server.link;
+    setState(() {
+      _selectedServerIndex = index;
+      _isNative = false;
+      _extracting = OkRuExtractor.isOkRuLink(server.link);
+    });
+
+    if (OkRuExtractor.isOkRuLink(server.link)) {
+      String? directUrl;
+      try {
+        directUrl = await OkRuExtractor.extractDirectUrl(server.link);
+      } catch (_) {
+        directUrl = null;
+      }
+
+      // Kalau user udah pindah server lagi sebelum extract selesai, batalin.
+      if (_loadedLink != server.link || !mounted) return;
+
+      if (directUrl != null) {
+        _disposeNativePlayer();
+        final controller = VideoPlayerController.networkUrl(
+          Uri.parse(directUrl),
+        );
+        try {
+          await controller.initialize();
+        } catch (_) {
+          controller.dispose();
+          _loadWebView(server.link);
+          return;
+        }
+
+        if (_loadedLink != server.link || !mounted) return;
+
+        _videoController = controller;
+        _chewieController = ChewieController(
+          videoPlayerController: controller,
+          autoPlay: true,
+          looping: false,
+          allowFullScreen: true,
+          materialProgressColors: ChewieProgressColors(
+            playedColor: AppColors.accent,
+            handleColor: AppColors.accent,
+          ),
+        );
+
+        setState(() {
+          _isNative = true;
+          _extracting = false;
+        });
+        return;
+      }
+    }
+
+    // Bukan OK.ru, atau extract gagal -> fallback ke WebView.
+    if (!mounted || _loadedLink != server.link) return;
+    _loadWebView(server.link);
+  }
+
+  void _loadWebView(String link) {
+    _disposeNativePlayer();
     _playerController = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       ..setBackgroundColor(AppColors.background)
-      ..loadRequest(Uri.parse(server.link));
+      ..loadRequest(Uri.parse(link));
 
     setState(() {
-      _selectedServerIndex = index;
-      _loadedLink = server.link;
+      _isNative = false;
+      _extracting = false;
     });
+  }
+
+  Widget _buildPlayerArea() {
+    if (_extracting) {
+      return Container(
+        color: Colors.black,
+        alignment: Alignment.center,
+        child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CupertinoActivityIndicator(color: Colors.white, radius: 14),
+            SizedBox(height: 10),
+            Text(
+              'Menyiapkan video...',
+              style: TextStyle(color: Colors.white70, fontSize: 12),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_isNative && _chewieController != null) {
+      return Chewie(controller: _chewieController!);
+    }
+
+    if (_playerController != null) {
+      return WebViewWidget(controller: _playerController!);
+    }
+
+    return Container(color: Colors.black);
   }
 
   Future<void> _openExternal(String url) async {
@@ -84,7 +204,12 @@ class _WatchScreenState extends State<WatchScreen> {
               message: '${snapshot.error}',
               onRetry: () {
                 setState(() {
-                  _futureWatch = _apiService.getStream(widget.episodeUrl);
+                  _futureWatch = _apiService.getStream(widget.episodeUrl)
+                    ..then((data) {
+                      if (mounted && data.streamingLinks.isNotEmpty) {
+                        _loadServer(data.streamingLinks.first, 0);
+                      }
+                    });
                 });
               },
             );
@@ -92,18 +217,12 @@ class _WatchScreenState extends State<WatchScreen> {
 
           final data = snapshot.data!;
 
-          if (_playerController == null && data.streamingLinks.isNotEmpty) {
-            _loadServer(data.streamingLinks.first, 0);
-          }
-
           return Column(
             children: [
               // Player gak ikut ke-scroll, posisinya fix di atas.
               AspectRatio(
                 aspectRatio: 16 / 9,
-                child: _playerController != null
-                    ? WebViewWidget(controller: _playerController!)
-                    : Container(color: Colors.black),
+                child: _buildPlayerArea(),
               ),
               Expanded(
                 child: ListView(
