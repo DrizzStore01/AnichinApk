@@ -5,8 +5,12 @@ workflows:
     environment:
       flutter: stable
     scripts:
-      - name: Regenerate native platform files
-        script: flutter create --platforms=android .
+      - name: Generate native Android project (org com.dev)
+        script: flutter create --platforms=android --org com.dev .
+      - name: Set app display name to "Anichin Beta"
+        script: |
+          sed -i.bak 's/android:label="[^"]*"/android:label="Anichin Beta"/' android/app/src/main/AndroidManifest.xml
+          rm -f android/app/src/main/AndroidManifest.xml.bak
       - name: Get Flutter packages
         script: flutter pub get
       - name: Build APK

@@ -6,41 +6,55 @@ Aplikasi nonton donghua/anime, data diambil dari API:
 - App name: **Anichin Beta**
 - Package/Application ID: `com.dev.anichinbeta`
 
+## Kenapa gak ada folder `android/` di dalam zip?
+
+Sengaja. Folder native Android (gradle, AGP, dll) itu isinya versi-versi yang
+harus PAS cocok satu sama lain DAN cocok dengan versi Flutter SDK yang dipakai
+buat build. Kalau ditulis manual, gampang banget salah versi dan build gagal
+(ini yang sempat kejadian sebelumnya).
+
+Jadi solusinya: folder `android/` di-generate OTOMATIS oleh Flutter SDK itu
+sendiri, baik di lokal maupun pas build di Codemagic — dijamin selalu cocok
+sama versi Flutter yang lagi kepakai saat itu.
+
 ## Cara Setup di Lokal
 
 1. Pastikan Flutter SDK sudah terinstall (`flutter --version`).
 2. Masuk ke folder project, jalankan:
    ```
-   flutter create --platforms=android .
+   flutter create --platforms=android --org com.dev .
    ```
-   Perintah ini WAJIB dijalankan sekali di awal. Fungsinya untuk melengkapi
-   file-file native Android yang tidak bisa dibuat manual (gradlew binary,
-   local.properties, dll), tanpa menimpa kode di folder `lib/` atau
-   `AndroidManifest.xml` / `build.gradle` yang sudah dikustomisasi.
-3. Install dependency:
+   Ini akan generate folder `android/` dengan applicationId `com.dev.anichinbeta`
+   secara otomatis (org `com.dev` + nama project `anichinbeta` di pubspec.yaml),
+   TANPA menimpa kode di folder `lib/`.
+3. (Opsional, biar nama aplikasi "Anichin Beta" bukan "Anichinbeta") edit
+   `android/app/src/main/AndroidManifest.xml`, ganti atribut `android:label`
+   jadi `"Anichin Beta"`.
+4. Install dependency:
    ```
    flutter pub get
    ```
-4. Jalankan di emulator/device:
+5. Jalankan di emulator/device:
    ```
    flutter run
    ```
 
 ## Build via Codemagic
 
-Project ini sudah dilengkapi `codemagic.yaml` di root folder.
+Project ini sudah dilengkapi `codemagic.yaml` di root folder, workflow-nya:
 
+1. `flutter create --platforms=android --org com.dev .` — generate folder
+   android otomatis pakai versi Gradle/AGP yang cocok dengan Flutter SDK
+   di mesin Codemagic saat itu.
+2. Patch `android:label` di AndroidManifest.xml jadi "Anichin Beta".
+3. `flutter pub get`
+4. `flutter build apk --release`
+
+Yang perlu kamu lakukan:
 1. Push project ini ke repo Git (GitHub/GitLab/Bitbucket).
 2. Di Codemagic, tambahkan aplikasi baru dari repo tersebut.
-3. Codemagic otomatis akan pakai `codemagic.yaml`, workflow `android-workflow`.
-   Step pertama di workflow sebaiknya kamu tambahkan juga:
-   ```
-   flutter create --platforms=android .
-   ```
-   sebelum `flutter pub get`, supaya file gradle wrapper otomatis lengkap
-   di environment build Codemagic (mesin Codemagic sudah include Flutter SDK,
-   jadi command ini aman & cepat).
-4. Notifikasi build (sukses/gagal) akan dikirim ke: `zyrooquestion@gmail.com`
+3. Codemagic otomatis pakai `codemagic.yaml` yang sudah ada, workflow `android-workflow`.
+4. Notifikasi build (sukses/gagal) dikirim ke: `zyrooquestion@gmail.com`
 5. Hasil APK ada di artifact `build/**/outputs/**/*.apk`.
 
 ## Struktur Project
@@ -52,20 +66,17 @@ lib/
   services/api_service.dart    -> fetch data dari API
   widgets/anime_card_widget.dart
   screens/home_screen.dart     -> featured slider, popular today, latest releases
-android/                       -> project native Android (applicationId com.dev.anichinbeta)
-pubspec.yaml
+pubspec.yaml                   -> nama project: anichinbeta
 codemagic.yaml
 ```
+(folder `android/` sengaja tidak disertakan — lihat penjelasan di atas)
 
 ## Catatan
 
-- Folder `ios/` belum disertakan. Kalau nanti mau build iOS juga, jalankan
-  `flutter create --platforms=ios .` di lokal buat generate project Xcode-nya.
-- Signing APK masih pakai debug key (`signingConfigs.debug`) supaya bisa
-  langsung build tanpa setup keystore dulu. Untuk rilis ke Play Store,
-  perlu bikin keystore sendiri dan diganti di `android/app/build.gradle`.
 - Halaman detail anime & video player belum dibuat, baru home screen.
-- Config Android pakai format **Kotlin DSL** (`build.gradle.kts` / `settings.gradle.kts`),
-  bukan Groovy (`.gradle`), menyesuaikan template Flutter terbaru. Jangan sampai ada
-  dobel file `build.gradle` dan `build.gradle.kts` di folder yang sama — itu bikin build gagal.
-- Gradle wrapper pakai versi 8.10.2 (minimum yang dibutuhkan Flutter versi baru adalah 8.7).
+- Signing APK masih pakai debug key bawaan Flutter (belum pakai keystore
+  sendiri). Untuk rilis ke Play Store, perlu bikin keystore sendiri dan
+  ditambahkan signing config di `android/app/build.gradle.kts` setelah
+  folder android digenerate.
+- Folder `ios/` juga belum disertakan dengan alasan yang sama. Kalau nanti
+  mau build iOS juga, jalankan `flutter create --platforms=ios .` di lokal.
