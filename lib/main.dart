@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
+import 'theme/app_theme.dart';
 
 void main() {
   runApp(const AnichinApp());
@@ -11,13 +12,9 @@ class AnichinApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Anichin App',
+      title: 'Anichin Beta',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.dark,
-        primarySwatch: Colors.red,
-        scaffoldBackgroundColor: const Color(0xFF121212),
-      ),
+      theme: buildAppTheme(),
       home: const HomeScreen(),
     );
   }

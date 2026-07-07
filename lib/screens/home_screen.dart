@@ -1,8 +1,11 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../models/home_model.dart';
 import '../services/api_service.dart';
+import '../theme/app_theme.dart';
 import '../widgets/anime_card_widget.dart';
 import '../widgets/featured_slider.dart';
+import '../widgets/section_header.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,73 +25,112 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() {
-      _futureHome = _apiService.getHome();
-    });
+    final future = _apiService.getHome();
+    setState(() => _futureHome = future);
+    await future;
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Anichin'),
-        centerTitle: false,
-      ),
+      backgroundColor: AppColors.background,
       body: FutureBuilder<HomeData>(
         future: _futureHome,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const _LoadingState();
           }
 
           if (snapshot.hasError) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                  const SizedBox(height: 8),
-                  Text('Gagal load data:\n${snapshot.error}',
-                      textAlign: TextAlign.center),
-                  const SizedBox(height: 12),
-                  ElevatedButton(
-                    onPressed: _refresh,
-                    child: const Text('Coba Lagi'),
-                  ),
-                ],
-              ),
+            return _ErrorState(
+              message: '${snapshot.error}',
+              onRetry: _refresh,
             );
           }
 
           final data = snapshot.data!;
 
-          return RefreshIndicator(
-            onRefresh: _refresh,
-            child: ListView(
-              padding: const EdgeInsets.only(bottom: 24),
-              children: [
-                // ---- Featured Slider ----
-                if (data.featuredSlider.isNotEmpty)
-                  FeaturedSlider(
+          return CustomScrollView(
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            slivers: [
+              const CupertinoSliverNavigationBar(
+                backgroundColor: AppColors.background,
+                border: null,
+                largeTitle: Text('Anichin', style: AppText.largeTitle),
+                stretch: true,
+              ),
+              CupertinoSliverRefreshControl(onRefresh: _refresh),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: FeaturedSlider(
                     items: data.featuredSlider,
                     onTap: (item) {
                       // TODO: navigate ke detail page pakai item.url
                     },
                   ),
-
-                const SizedBox(height: 16),
-
-                // ---- Popular Today ----
-                _SectionTitle(title: 'Popular Today'),
-                SizedBox(
-                  height: 210,
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 28),
+                  child: SectionHeader(
+                    title: 'Popular Today',
+                    onSeeAll: () {
+                      // TODO: navigate ke halaman list lengkap
+                    },
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 200,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     itemCount: data.popularToday.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 10),
+                    separatorBuilder: (_, __) => const SizedBox(width: 14),
                     itemBuilder: (context, index) {
                       final anime = data.popularToday[index];
+                      return SizedBox(
+                        width: 128,
+                        child: AnimeCardWidget(
+                          anime: anime,
+                          onTap: () {
+                            // TODO: navigate ke detail page pakai anime.url
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 24),
+                  child: SectionHeader(
+                    title: 'Latest Releases',
+                    onSeeAll: () {
+                      // TODO: navigate ke halaman list lengkap
+                    },
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                sliver: SliverGrid(
+                  gridDelegate:
+                      const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    mainAxisSpacing: 18,
+                    crossAxisSpacing: 12,
+                    childAspectRatio: 0.56,
+                  ),
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final anime = data.latestReleases[index];
                       return AnimeCardWidget(
                         anime: anime,
                         onTap: () {
@@ -96,36 +138,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       );
                     },
+                    childCount: data.latestReleases.length,
                   ),
                 ),
-
-                const SizedBox(height: 16),
-
-                // ---- Latest Releases (grid) ----
-                _SectionTitle(title: 'Latest Releases'),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: data.latestReleases.length,
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 10,
-                    childAspectRatio: 0.55,
-                  ),
-                  itemBuilder: (context, index) {
-                    final anime = data.latestReleases[index];
-                    return AnimeCardWidget(
-                      anime: anime,
-                      onTap: () {
-                        // TODO: navigate ke detail page pakai anime.url
-                      },
-                    );
-                  },
-                ),
-              ],
-            ),
+              ),
+            ],
           );
         },
       ),
@@ -133,17 +150,76 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  final String title;
-  const _SectionTitle({required this.title});
+class _LoadingState extends StatelessWidget {
+  const _LoadingState();
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      child: Text(
-        title,
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+    return const Center(
+      child: CupertinoActivityIndicator(
+        radius: 16,
+        color: AppColors.textSecondary,
+      ),
+    );
+  }
+}
+
+class _ErrorState extends StatelessWidget {
+  final String message;
+  final Future<void> Function() onRetry;
+
+  const _ErrorState({required this.message, required this.onRetry});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                CupertinoIcons.wifi_slash,
+                color: AppColors.accent,
+                size: 28,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Gagal memuat data',
+              style: AppText.sectionTitle,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              message,
+              style: AppText.cardSubtitle,
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 20),
+            CupertinoButton(
+              color: AppColors.accent,
+              borderRadius: BorderRadius.circular(12),
+              onPressed: onRetry,
+              child: const Text(
+                'Coba Lagi',
+                style: TextStyle(
+                  color: Colors.black,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

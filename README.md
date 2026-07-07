@@ -77,6 +77,9 @@ codemagic.yaml
   (bukan package `carousel_slider`), karena package tersebut masih bentrok
   nama class `CarouselController` dengan widget bawaan Flutter versi baru
   dan belum ada fix resminya di pub.dev.
+- UI sudah di-redesign gaya iOS: large title header yang collapse pas scroll
+  (`CupertinoSliverNavigationBar`), pull-to-refresh gaya iOS, dan design token
+  warna/tipografi terpusat di `lib/theme/app_theme.dart`.
 - Halaman detail anime & video player belum dibuat, baru home screen.
 - Signing APK masih pakai debug key bawaan Flutter (belum pakai keystore
   sendiri). Untuk rilis ke Play Store, perlu bikin keystore sendiri dan
