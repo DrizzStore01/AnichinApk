@@ -65,3 +65,7 @@ codemagic.yaml
   langsung build tanpa setup keystore dulu. Untuk rilis ke Play Store,
   perlu bikin keystore sendiri dan diganti di `android/app/build.gradle`.
 - Halaman detail anime & video player belum dibuat, baru home screen.
+- Config Android pakai format **Kotlin DSL** (`build.gradle.kts` / `settings.gradle.kts`),
+  bukan Groovy (`.gradle`), menyesuaikan template Flutter terbaru. Jangan sampai ada
+  dobel file `build.gradle` dan `build.gradle.kts` di folder yang sama — itu bikin build gagal.
+- Gradle wrapper pakai versi 8.10.2 (minimum yang dibutuhkan Flutter versi baru adalah 8.7).
