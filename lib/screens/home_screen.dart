@@ -113,7 +113,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             Navigator.of(context).push(
                               MaterialPageRoute(
                                 builder: (_) =>
-                                    DetailScreen(animeUrl: anime.url),
+                                    WatchScreen(episodeUrl: anime.url),
                               ),
                             );
                           },

@@ -96,105 +96,132 @@ class _WatchScreenState extends State<WatchScreen> {
             _loadServer(data.streamingLinks.first, 0);
           }
 
-          return ListView(
-            padding: EdgeInsets.zero,
+          return Column(
             children: [
+              // Player gak ikut ke-scroll, posisinya fix di atas.
               AspectRatio(
                 aspectRatio: 16 / 9,
                 child: _playerController != null
                     ? WebViewWidget(controller: _playerController!)
                     : Container(color: Colors.black),
               ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              Expanded(
+                child: ListView(
+                  padding: EdgeInsets.zero,
                   children: [
-                    Text(data.title, style: AppText.sectionTitle),
-                    const SizedBox(height: 4),
-                    Text(data.series, style: AppText.cardSubtitle),
-                    const SizedBox(height: 18),
-                    _EpisodeNavBar(
-                      navigation: data.navigation,
-                      onNavigate: _goToEpisode,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(data.title, style: AppText.sectionTitle),
+                          const SizedBox(height: 4),
+                          Text(data.series, style: AppText.cardSubtitle),
+                          const SizedBox(height: 18),
+                          _EpisodeNavBar(
+                            navigation: data.navigation,
+                            onNavigate: _goToEpisode,
+                          ),
+                          const SizedBox(height: 20),
+                          Text('Pilih Server', style: AppText.cardTitle),
+                          const SizedBox(height: 10),
+                          _ServerDropdown(
+                            servers: data.streamingLinks,
+                            selectedIndex: _selectedServerIndex,
+                            onChanged: _loadServer,
+                          ),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 20),
-                    Text('Pilih Server', style: AppText.cardTitle),
-                    const SizedBox(height: 10),
+                    if (data.downloadLinks.isNotEmpty) ...[
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+                        child: Text('Download', style: AppText.cardTitle),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Column(
+                          children: data.downloadLinks
+                              .map((q) => _DownloadTile(
+                                    quality: q,
+                                    onTapHost: (link) => _openExternal(link),
+                                  ))
+                              .toList(),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),
-              SizedBox(
-                height: 42,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: data.streamingLinks.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final server = data.streamingLinks[index];
-                    final isActive = index == _selectedServerIndex;
-                    return GestureDetector(
-                      onTap: () => _loadServer(server, index),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14),
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: isActive
-                              ? AppColors.accent
-                              : AppColors.surface,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              server.displayName,
-                              style: AppText.cardSubtitle.copyWith(
-                                color: isActive
-                                    ? Colors.white
-                                    : AppColors.textPrimary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            if (server.hasAds) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                CupertinoIcons.exclamationmark_circle,
-                                size: 13,
-                                color: isActive
-                                    ? Colors.white70
-                                    : AppColors.textSecondary,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              if (data.downloadLinks.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
-                  child: Text('Download', style: AppText.cardTitle),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Column(
-                    children: data.downloadLinks
-                        .map((q) => _DownloadTile(
-                              quality: q,
-                              onTapHost: (link) => _openExternal(link),
-                            ))
-                        .toList(),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 32),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _ServerDropdown extends StatelessWidget {
+  final List<StreamingLink> servers;
+  final int selectedIndex;
+  final void Function(StreamingLink server, int index) onChanged;
+
+  const _ServerDropdown({
+    required this.servers,
+    required this.selectedIndex,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<int>(
+          value: selectedIndex,
+          isExpanded: true,
+          dropdownColor: AppColors.surface,
+          icon: const Icon(
+            CupertinoIcons.chevron_down,
+            size: 16,
+            color: AppColors.textSecondary,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          items: List.generate(servers.length, (index) {
+            final server = servers[index];
+            return DropdownMenuItem<int>(
+              value: index,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    server.displayName,
+                    style: AppText.cardTitle,
+                  ),
+                  if (server.hasAds) ...[
+                    const SizedBox(width: 6),
+                    const Icon(
+                      CupertinoIcons.exclamationmark_circle,
+                      size: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                  ],
+                ],
+              ),
+            );
+          }),
+          onChanged: (index) {
+            if (index == null) return;
+            onChanged(servers[index], index);
+          },
+        ),
       ),
     );
   }
@@ -297,6 +324,7 @@ class _DownloadTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -308,39 +336,37 @@ class _DownloadTile extends StatelessWidget {
         children: [
           Text(quality.quality, style: AppText.cardTitle),
           const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: quality.links
-                .map(
-                  (host) => GestureDetector(
-                    onTap: () => onTapHost(host.link),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceElevated,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: AppColors.divider),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(host.host, style: AppText.cardSubtitle),
-                          const SizedBox(width: 4),
-                          const Icon(
-                            CupertinoIcons.arrow_up_right_square,
-                            size: 14,
-                            color: AppColors.textSecondary,
-                          ),
-                        ],
-                      ),
-                    ),
+          ...quality.links.map(
+            (host) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: GestureDetector(
+                onTap: () => onTapHost(host.link),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
                   ),
-                )
-                .toList(),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceElevated,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.divider),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(host.host, style: AppText.cardTitle),
+                      ),
+                      const Icon(
+                        CupertinoIcons.arrow_up_right_square,
+                        size: 16,
+                        color: AppColors.textSecondary,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
