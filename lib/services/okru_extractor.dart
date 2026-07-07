@@ -54,34 +54,49 @@ class OkRuExtractor {
 
     final html = response.body;
 
-    // Attribute-nya "data-options="{...semua di-HTML-escape...}"" — gak ada
-    // tanda kutip mentah di dalem value-nya (semua udah jadi &quot;), jadi
-    // aman diambil sekaligus sampe kutip penutup pertama.
-    final optionsMatch =
-        RegExp(r'data-options="([^"]*)"').firstMatch(html);
-    if (optionsMatch == null) {
+    // PENTING: halaman embed OK.ru biasanya punya LEBIH DARI SATU elemen yang
+    // punya attribute data-options (ada widget lain selain video player).
+    // Kalau kita cuma ambil match PERTAMA, sering kali yang ke-ambil itu
+    // bukan JSON player (gak ada "flashvars" di dalemnya), jadi extract
+    // gagal terus tanpa alasan yang jelas. Makanya di sini kita loop SEMUA
+    // match, dan ambil yang JSON-nya beneran mengandung "flashvars".
+    final allOptionsMatches =
+        RegExp(r'data-options="([^"]*)"').allMatches(html).toList();
+    if (allOptionsMatches.isEmpty) {
       debugPrint('[OkRu] regex data-options gak nemu match sama sekali. '
           'Kemungkinan HTML yang dibalikin beda (misal halaman blokir/captcha).');
       return null;
     }
-    debugPrint('[OkRu] data-options ketemu, panjang: '
-        '${optionsMatch.group(1)!.length} karakter');
+    debugPrint('[OkRu] jumlah data-options ketemu: ${allOptionsMatches.length}');
 
     Map<String, dynamic>? player;
-    try {
-      player = json.decode(_htmlUnescape(optionsMatch.group(1)!));
-    } catch (e) {
-      debugPrint('[OkRu] gagal decode JSON player (data-options): $e');
-      return null;
-    }
-    debugPrint('[OkRu] player JSON berhasil di-decode. '
-        'Keys: ${player?.keys.toList()}');
+    for (final m in allOptionsMatches) {
+      final raw = m.group(1)!;
+      // Cek cepat sebelum decode JSON (masih ter-HTML-escape jadi &quot;
+      // dsb, tapi kata "flashvars" tetep polos jadi aman di-cek).
+      if (!raw.contains('flashvars')) continue;
 
-    final flashvars = player?['flashvars'] as Map<String, dynamic>?;
-    if (flashvars == null) {
-      debugPrint('[OkRu] flashvars null / bukan Map. player: $player');
+      try {
+        final decoded = json.decode(_htmlUnescape(raw)) as Map<String, dynamic>;
+        if (decoded['flashvars'] is Map) {
+          player = decoded;
+          break;
+        }
+      } catch (e) {
+        debugPrint('[OkRu] gagal decode salah satu data-options, skip: $e');
+        continue;
+      }
+    }
+
+    if (player == null) {
+      debugPrint('[OkRu] gak ada data-options yang mengandung flashvars '
+          'valid dari ${allOptionsMatches.length} kandidat.');
       return null;
     }
+    debugPrint('[OkRu] player JSON (flashvars) berhasil di-decode. '
+        'Keys: ${player.keys.toList()}');
+
+    final flashvars = player['flashvars'] as Map<String, dynamic>;
 
     final metadataRaw = flashvars['metadata'];
     if (metadataRaw is! String) {
