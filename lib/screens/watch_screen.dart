@@ -36,6 +36,12 @@ class _WatchScreenState extends State<WatchScreen> {
   bool _isNative = false;
   bool _extracting = false;
 
+  // Kualitas video yang tersedia buat server OK.ru yang lagi aktif, plus
+  // header yang wajib dibawa tiap kali request video/manifest (Referer dsb).
+  List<OkRuQuality> _qualities = [];
+  OkRuQuality? _currentQuality;
+  Map<String, String> _playbackHeaders = const {};
+
   @override
   void initState() {
     super.initState();
@@ -68,6 +74,8 @@ class _WatchScreenState extends State<WatchScreen> {
     setState(() {
       _selectedServerIndex = index;
       _isNative = false;
+      _qualities = [];
+      _currentQuality = null;
       _extracting = OkRuExtractor.isOkRuLink(server.link);
     });
 
@@ -85,13 +93,16 @@ class _WatchScreenState extends State<WatchScreen> {
 
       if (stream != null) {
         _disposeNativePlayer();
+        _playbackHeaders = stream.headers;
+
+        final quality = stream.defaultQuality;
         // PENTING: httpHeaders wajib dikirim juga pas request video/manifest
         // -nya (bukan cuma pas ambil embed page). Tanpa Referer & User-Agent
         // yang bener, CDN OK.ru nolak request-nya (403) dan initialize()
         // bakal gagal walau url-nya sendiri valid.
         final controller = VideoPlayerController.networkUrl(
-          Uri.parse(stream.url),
-          httpHeaders: stream.headers,
+          Uri.parse(quality.url),
+          httpHeaders: _playbackHeaders,
         );
         try {
           await controller.initialize();
@@ -105,20 +116,13 @@ class _WatchScreenState extends State<WatchScreen> {
         if (_loadedLink != server.link || !mounted) return;
 
         _videoController = controller;
-        _chewieController = ChewieController(
-          videoPlayerController: controller,
-          autoPlay: true,
-          looping: false,
-          allowFullScreen: true,
-          materialProgressColors: ChewieProgressColors(
-            playedColor: AppColors.accent,
-            handleColor: AppColors.accent,
-          ),
-        );
+        _chewieController = _buildChewieController(controller, autoPlay: true);
 
         setState(() {
           _isNative = true;
           _extracting = false;
+          _qualities = stream!.qualities;
+          _currentQuality = quality;
         });
         return;
       }
@@ -127,6 +131,156 @@ class _WatchScreenState extends State<WatchScreen> {
     // Bukan OK.ru, atau extract gagal -> fallback ke WebView.
     if (!mounted || _loadedLink != server.link) return;
     _loadWebView(server.link);
+  }
+
+  /// Ganti kualitas video TANPA balik ke awal — posisi tonton & status
+  /// play/pause dipertahanin (kayak ganti kualitas di YouTube).
+  Future<void> _switchQuality(OkRuQuality quality) async {
+    if (quality == _currentQuality || _videoController == null) return;
+
+    final resumeAt = _videoController!.value.position;
+    final wasPlaying = _videoController!.value.isPlaying;
+
+    setState(() => _extracting = true);
+    _disposeNativePlayer();
+
+    final controller = VideoPlayerController.networkUrl(
+      Uri.parse(quality.url),
+      httpHeaders: _playbackHeaders,
+    );
+
+    try {
+      await controller.initialize();
+      await controller.seekTo(resumeAt);
+    } catch (e) {
+      debugPrint('[Watch] gagal ganti kualitas ke ${quality.label}: $e');
+      controller.dispose();
+      if (!mounted) return;
+      setState(() => _extracting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal ganti ke kualitas ${quality.label}')),
+      );
+      return;
+    }
+
+    if (!mounted) {
+      controller.dispose();
+      return;
+    }
+
+    _videoController = controller;
+    _chewieController = _buildChewieController(controller, autoPlay: wasPlaying);
+
+    setState(() {
+      _currentQuality = quality;
+      _extracting = false;
+    });
+  }
+
+  ChewieController _buildChewieController(
+    VideoPlayerController controller, {
+    required bool autoPlay,
+  }) {
+    return ChewieController(
+      videoPlayerController: controller,
+      autoPlay: autoPlay,
+      looping: false,
+      allowFullScreen: true,
+      // Layar gak mati sendiri pas lagi nonton.
+      allowedScreenSleep: false,
+      materialProgressColors: ChewieProgressColors(
+        playedColor: AppColors.accent,
+        handleColor: AppColors.accent,
+        bufferedColor: Colors.white24,
+      ),
+      optionsTranslation: OptionsTranslation(
+        playbackSpeedButtonText: 'Kecepatan Putar',
+        subtitlesButtonText: 'Subtitle',
+        cancelButtonText: 'Batal',
+      ),
+      additionalOptions: (context) {
+        if (_qualities.length <= 1) return [];
+        return [
+          OptionItem(
+            onTap: (ctx) {
+              Navigator.of(ctx).pop();
+              _showQualityPicker();
+            },
+            iconData: Icons.high_quality_outlined,
+            title: 'Kualitas (${_currentQuality?.label ?? '-'})',
+          ),
+        ];
+      },
+      errorBuilder: (context, errorMessage) {
+        return Container(
+          color: Colors.black,
+          alignment: Alignment.center,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                CupertinoIcons.exclamationmark_triangle,
+                color: Colors.white70,
+                size: 30,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                errorMessage,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showQualityPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Pilih Kualitas', style: AppText.cardTitle),
+                ),
+              ),
+              ..._qualities.map((q) {
+                final selected = q == _currentQuality;
+                return ListTile(
+                  title: Text(
+                    q.label,
+                    style: AppText.cardTitle.copyWith(
+                      color: selected ? AppColors.accent : null,
+                    ),
+                  ),
+                  trailing: selected
+                      ? const Icon(CupertinoIcons.checkmark_alt,
+                          color: AppColors.accent)
+                      : null,
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    _switchQuality(q);
+                  },
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _loadWebView(String link) {
@@ -139,6 +293,8 @@ class _WatchScreenState extends State<WatchScreen> {
     setState(() {
       _isNative = false;
       _extracting = false;
+      _qualities = [];
+      _currentQuality = null;
     });
   }
 
@@ -162,7 +318,20 @@ class _WatchScreenState extends State<WatchScreen> {
     }
 
     if (_isNative && _chewieController != null) {
-      return Chewie(controller: _chewieController!);
+      return Stack(
+        children: [
+          Positioned.fill(child: Chewie(controller: _chewieController!)),
+          if (_qualities.length > 1)
+            Positioned(
+              top: 10,
+              right: 10,
+              child: _QualityChip(
+                label: _currentQuality?.label ?? '',
+                onTap: _showQualityPicker,
+              ),
+            ),
+        ],
+      );
     }
 
     if (_playerController != null) {
@@ -496,6 +665,48 @@ class _DownloadTile extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _QualityChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+
+  const _QualityChip({required this.label, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.55),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withOpacity(0.15)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(
+              CupertinoIcons.chevron_down,
+              size: 12,
+              color: Colors.white70,
+            ),
+          ],
+        ),
       ),
     );
   }

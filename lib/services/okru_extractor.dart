@@ -2,15 +2,29 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
-/// Hasil extract: url video/manifest + header yang WAJIB dibawa pas muter
-/// videonya (bukan cuma pas ambil embed page-nya doang). CDN OK.ru punya
-/// proteksi hotlink — kalau request video/manifest-nya gak bawa Referer &
-/// User-Agent yang bener, CDN bakal nolak (403) walau url-nya valid.
-class OkRuStream {
+/// Satu opsi kualitas video yang bisa dipilih user (mis. "Full HD", "HD").
+class OkRuQuality {
+  final String label;
   final String url;
+
+  OkRuQuality({required this.label, required this.url});
+}
+
+/// Hasil extract: SEMUA kualitas yang tersedia + header yang WAJIB dibawa
+/// pas muter videonya (bukan cuma pas ambil embed page-nya doang). CDN
+/// OK.ru punya proteksi hotlink — kalau request video/manifest-nya gak
+/// bawa Referer & User-Agent yang bener, CDN bakal nolak (403) walau
+/// url-nya valid.
+class OkRuStream {
+  /// Urutan dari yang paling direkomendasiin (HLS/Auto kalau ada, baru
+  /// kualitas mp4 dari yang paling bagus).
+  final List<OkRuQuality> qualities;
   final Map<String, String> headers;
 
-  OkRuStream({required this.url, required this.headers});
+  OkRuStream({required this.qualities, required this.headers});
+
+  /// Kualitas yang dipakai pas pertama kali video dibuka.
+  OkRuQuality get defaultQuality => qualities.first;
 }
 
 /// Extractor khusus buat embed OK.ru (odnoklassniki).
@@ -142,38 +156,61 @@ class OkRuExtractor {
     debugPrint('[OkRu] metadata JSON berhasil di-decode. '
         'Keys: ${metadata.keys.toList()}');
 
-    // Prioritas: hlsManifestUrl (adaptive, paling stabil di video_player).
+    // Kumpulin SEMUA kualitas yang ada (bukan langsung pilih satu), biar
+    // user bisa milih sendiri lewat UI quality picker.
+    final qualities = <OkRuQuality>[];
+
+    // HLS/Auto ditaruh paling atas (paling direkomendasiin, adaptive).
     final hlsUrl = metadata['hlsManifestUrl'];
     if (hlsUrl is String && hlsUrl.isNotEmpty) {
       debugPrint('[OkRu] hlsManifestUrl ketemu: $hlsUrl');
-      return OkRuStream(url: hlsUrl, headers: playbackHeaders);
+      qualities.add(OkRuQuality(label: 'Auto (HLS)', url: hlsUrl));
     }
 
     final videos = (metadata['videos'] as List?) ?? [];
-    debugPrint('[OkRu] gak ada hlsManifestUrl, jumlah videos: ${videos.length}');
-    if (videos.isEmpty) return null;
+    debugPrint('[OkRu] jumlah videos (mp4): ${videos.length}');
 
     // Urutan kualitas dari yang paling bagus, sesuai nama yang dipake OK.ru.
     const preferredOrder = ['full', 'hd', 'sd', 'low', 'lowest', 'mobile'];
+    const labels = {
+      'full': 'Full HD',
+      'hd': 'HD',
+      'sd': 'SD',
+      'low': 'Rendah',
+      'lowest': 'Terendah',
+      'mobile': 'Mobile',
+    };
+
     for (final name in preferredOrder) {
       final match = videos.cast<Map?>().firstWhere(
             (v) => v?['name'] == name,
             orElse: () => null,
           );
       if (match != null && match['url'] is String) {
-        debugPrint('[OkRu] pakai kualitas "$name": ${match['url']}');
-        return OkRuStream(url: match['url'] as String, headers: playbackHeaders);
+        qualities.add(
+          OkRuQuality(label: labels[name]!, url: match['url'] as String),
+        );
       }
     }
 
-    // Gak ketemu nama yang cocok, ambil aja yang terakhir (biasanya kualitas tertinggi).
-    final fallback = videos.last;
-    final fallbackUrl =
-        fallback is Map && fallback['url'] is String ? fallback['url'] as String : null;
-    debugPrint('[OkRu] pakai fallback video terakhir: $fallbackUrl');
-    return fallbackUrl != null
-        ? OkRuStream(url: fallbackUrl, headers: playbackHeaders)
-        : null;
+    // Jaga-jaga: kalau ada video dengan nama yang gak dikenali (di luar
+    // preferredOrder di atas), tetep dimasukin biar gak ke-skip diem-diem.
+    for (final v in videos) {
+      if (v is! Map || v['url'] is! String) continue;
+      final url = v['url'] as String;
+      if (qualities.any((q) => q.url == url)) continue;
+      final name = v['name']?.toString() ?? 'Kualitas';
+      qualities.add(OkRuQuality(label: labels[name] ?? name, url: url));
+    }
+
+    if (qualities.isEmpty) {
+      debugPrint('[OkRu] gak ada hlsManifestUrl maupun videos yang valid.');
+      return null;
+    }
+
+    debugPrint(
+        '[OkRu] kualitas tersedia: ${qualities.map((q) => q.label).toList()}');
+    return OkRuStream(qualities: qualities, headers: playbackHeaders);
   }
 
   static String _htmlUnescape(String s) {
