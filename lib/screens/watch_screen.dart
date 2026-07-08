@@ -117,7 +117,12 @@ class _WatchScreenState extends State<WatchScreen> {
         if (_loadedLink != server.link || !mounted) return;
 
         _videoController = controller;
-        _chewieController = _buildChewieController(controller, autoPlay: true);
+        _chewieController = _buildChewieController(
+          controller,
+          autoPlay: true,
+          qualities: stream.qualities,
+          currentQuality: quality,
+        );
 
         setState(() {
           _isNative = true;
@@ -170,7 +175,12 @@ class _WatchScreenState extends State<WatchScreen> {
     }
 
     _videoController = controller;
-    _chewieController = _buildChewieController(controller, autoPlay: wasPlaying);
+    _chewieController = _buildChewieController(
+      controller,
+      autoPlay: wasPlaying,
+      qualities: _qualities,
+      currentQuality: quality,
+    );
 
     setState(() {
       _currentQuality = quality;
@@ -181,6 +191,8 @@ class _WatchScreenState extends State<WatchScreen> {
   ChewieController _buildChewieController(
     VideoPlayerController controller, {
     required bool autoPlay,
+    required List<OkRuQuality> qualities,
+    required OkRuQuality? currentQuality,
   }) {
     return ChewieController(
       videoPlayerController: controller,
@@ -193,9 +205,14 @@ class _WatchScreenState extends State<WatchScreen> {
       // Custom controls sendiri (bukan bawaan Chewie) biar tampilannya
       // lebih niat: tombol play besar di tengah, seek ±10 detik, progress
       // bar custom, fullscreen toggle, double-tap buat seek, auto-hide.
+      // PENTING: qualities/currentQuality di-pass LANGSUNG (bukan baca
+      // _qualities/_currentQuality field) soalnya field itu di-update lewat
+      // setState SETELAH method ini dipanggil — kalau baca field, widget
+      // controls sempet ke-render duluan dengan list kualitas kosong
+      // (makanya tombol quality kemarin sempet ilang).
       customControls: _CustomPlayerControls(
-        qualities: _qualities,
-        currentQuality: _currentQuality,
+        qualities: qualities,
+        currentQuality: currentQuality,
         onQualityTap: _showQualityPicker,
       ),
       errorBuilder: (context, errorMessage) {
@@ -752,6 +769,129 @@ class _CustomPlayerControlsState extends State<_CustomPlayerControls> {
     return h > 0 ? '$h:${two(m)}:${two(s)}' : '${two(m)}:${two(s)}';
   }
 
+  static const _speedOptions = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
+
+  String _speedLabel(double s) {
+    if (s == 1.0) return 'Normal';
+    final isWhole = s == s.roundToDouble();
+    final numStr = isWhole ? s.toStringAsFixed(0) : s.toString();
+    return '${numStr}x';
+  }
+
+  /// Menu "Pengaturan" gaya YouTube — gabungin Kualitas & Kecepatan Putar
+  /// dalam satu tombol gear, biar gak berantakan banyak tombol di kontrol.
+  void _showSettingsSheet() {
+    _hideTimer?.cancel();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Pengaturan', style: AppText.cardTitle),
+                ),
+              ),
+              if (widget.qualities.length > 1)
+                ListTile(
+                  leading: const Icon(
+                    CupertinoIcons.slider_horizontal_3,
+                    color: AppColors.textSecondary,
+                  ),
+                  title: const Text('Kualitas', style: AppText.cardTitle),
+                  trailing: Text(
+                    widget.currentQuality?.label ?? '-',
+                    style: AppText.cardSubtitle,
+                  ),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    widget.onQualityTap();
+                  },
+                ),
+              ListTile(
+                leading: const Icon(
+                  CupertinoIcons.speedometer,
+                  color: AppColors.textSecondary,
+                ),
+                title: const Text('Kecepatan Putar', style: AppText.cardTitle),
+                trailing: Text(
+                  _speedLabel(_video.value.playbackSpeed),
+                  style: AppText.cardSubtitle,
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _showSpeedSheet();
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    ).whenComplete(() {
+      if (mounted && _video.value.isPlaying) _scheduleHide();
+    });
+  }
+
+  void _showSpeedSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 18, 20, 8),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Kecepatan Putar', style: AppText.cardTitle),
+                ),
+              ),
+              ..._speedOptions.map((s) {
+                final selected = _video.value.playbackSpeed == s;
+                return ListTile(
+                  title: Text(
+                    _speedLabel(s),
+                    style: AppText.cardTitle.copyWith(
+                      color: selected ? AppColors.accent : null,
+                    ),
+                  ),
+                  trailing: selected
+                      ? const Icon(
+                          CupertinoIcons.checkmark_alt,
+                          color: AppColors.accent,
+                        )
+                      : null,
+                  onTap: () {
+                    _video.setPlaybackSpeed(s);
+                    setState(() {});
+                    Navigator.of(ctx).pop();
+                  },
+                );
+              }),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    ).whenComplete(() {
+      if (mounted && _video.value.isPlaying) _scheduleHide();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final value = _video.value;
@@ -816,42 +956,14 @@ class _CustomPlayerControlsState extends State<_CustomPlayerControls> {
                                   onPressed: _chewie.toggleFullScreen,
                                 ),
                               const Spacer(),
-                              if (widget.qualities.length > 1)
-                                GestureDetector(
-                                  onTap: widget.onQualityTap,
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 6,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.black.withOpacity(0.4),
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(
-                                        color: Colors.white24,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          widget.currentQuality?.label ?? '',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 4),
-                                        const Icon(
-                                          CupertinoIcons.chevron_down,
-                                          size: 12,
-                                          color: Colors.white70,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
+                              IconButton(
+                                icon: const Icon(
+                                  CupertinoIcons.gear_alt_fill,
+                                  color: Colors.white,
+                                  size: 21,
                                 ),
+                                onPressed: _showSettingsSheet,
+                              ),
                             ],
                           ),
                         ),
