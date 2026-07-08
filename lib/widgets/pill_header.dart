@@ -63,10 +63,16 @@ class PillHeaderDelegate extends SliverPersistentHeaderDelegate {
                   GestureDetector(
                     onTap: onSearchTap,
                     behavior: HitTestBehavior.opaque,
-                    child: const Icon(
-                      CupertinoIcons.search,
-                      color: AppColors.accent,
-                      size: 22,
+                    child: const Hero(
+                      tag: 'anichin-search-bar',
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: Icon(
+                          CupertinoIcons.search,
+                          color: AppColors.accent,
+                          size: 22,
+                        ),
+                      ),
                     ),
                   ),
                 ],

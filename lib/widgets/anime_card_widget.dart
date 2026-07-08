@@ -18,6 +18,38 @@ class AnimeCardWidget extends StatelessWidget {
     this.titleInsideCard = false,
   });
 
+  /// Ngitung `childAspectRatio` yang AMAN buat grid yang isinya card ini
+  /// (varian `titleInsideCard: false`, judul+subtitle DI BAWAH poster).
+  ///
+  /// PENTING: jangan hardcode childAspectRatio kayak sebelumnya (0.56),
+  /// soalnya itu gak ngitung tinggi asli konten (poster + judul 2 baris +
+  /// subtitle). Kalau cell grid-nya lebih pendek dari tinggi asli konten,
+  /// hasilnya numpuk/overlap ke row di bawahnya pas judulnya panjang.
+  /// Fungsi ini itung tinggi yang beneran dibutuhin berdasarkan lebar
+  /// card aktual, jadi selalu pas di semua ukuran layar.
+  static double gridAspectRatio(
+    BuildContext context, {
+    required int crossAxisCount,
+    required double crossAxisSpacing,
+    required double horizontalPadding,
+  }) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final totalSpacing = crossAxisSpacing * (crossAxisCount - 1);
+    final itemWidth =
+        (screenWidth - horizontalPadding - totalSpacing) / crossAxisCount;
+
+    // Poster pakai aspect ratio 2:3 (lihat AspectRatio di bawah).
+    final posterHeight = itemWidth * 3 / 2;
+
+    // Tinggi teks di bawah poster: gap(8) + judul 2 baris (cardTitle
+    // fontSize 13 x height 1.25 x 2 baris) + gap(2) + subtitle (cardSubtitle
+    // fontSize 11.5) + sedikit buffer pengaman.
+    const textBlockHeight = 8.0 + (13 * 1.25 * 2) + 2.0 + 16.0 + 6.0;
+
+    final itemHeight = posterHeight + textBlockHeight;
+    return itemWidth / itemHeight;
+  }
+
   @override
   Widget build(BuildContext context) {
     final poster = AspectRatio(

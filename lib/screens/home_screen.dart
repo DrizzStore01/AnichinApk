@@ -140,12 +140,21 @@ class _HomeScreenState extends State<HomeScreen> {
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
                 sliver: SliverGrid(
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 3,
                     mainAxisSpacing: 18,
                     crossAxisSpacing: 12,
-                    childAspectRatio: 0.56,
+                    // Dihitung dinamis (bukan angka hardcode) biar tinggi
+                    // cell SELALU muat poster + judul 2 baris + subtitle,
+                    // gak peduli seberapa lebar layarnya. Kalau
+                    // childAspectRatio-nya kekecilan tinggi (angka gede),
+                    // teksnya numpuk ke row di bawahnya.
+                    childAspectRatio: AnimeCardWidget.gridAspectRatio(
+                      context,
+                      crossAxisCount: 3,
+                      crossAxisSpacing: 12,
+                      horizontalPadding: 40,
+                    ),
                   ),
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {

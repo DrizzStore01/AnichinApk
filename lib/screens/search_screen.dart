@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import '../models/home_model.dart';
@@ -34,6 +35,12 @@ class _SearchScreenState extends State<SearchScreen> {
   bool _hasSearched = false;
   String _lastQuery = '';
 
+  // Ukuran floating bar (back button + search field), dipakai buat nentuin
+  // padding atas konten biar gak ketutup.
+  static const double _barHeight = 44;
+  static const double _barTopMargin = 8;
+  static const double _contentGapAfterBar = 14;
+
   @override
   void initState() {
     super.initState();
@@ -58,7 +65,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _onQueryChanged(String value) {
     _debounce?.cancel();
-    setState(() {}); // buat refresh tombol clear (X)
+    setState(() {}); // refresh tombol clear (X)
 
     final trimmed = value.trim();
     if (trimmed.isEmpty) {
@@ -121,8 +128,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _loadingMore = false;
       });
     } catch (_) {
-      // Gagal load more -> diemin aja, jangan ganggu hasil yang udah ada di
-      // layar. User tinggal scroll dikit lagi buat retry otomatis.
+      // Gagal load more -> diemin aja, jangan ganggu hasil yang udah ada.
       if (myRequestId != _requestId || !mounted) return;
       setState(() => _loadingMore = false);
     }
@@ -142,81 +148,78 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
+    final contentTopPadding =
+        topPadding + _barTopMargin + _barHeight + _contentGapAfterBar;
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: const BackButton(color: AppColors.textPrimary),
-        titleSpacing: 0,
-        title: _buildSearchField(),
-      ),
-      body: _buildBody(),
-    );
-  }
-
-  Widget _buildSearchField() {
-    return Container(
-      height: 40,
-      margin: const EdgeInsets.only(right: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: Row(
+      body: Stack(
         children: [
-          const Icon(
-            CupertinoIcons.search,
-            size: 18,
-            color: AppColors.textSecondary,
+          // Konten di-scroll DI BALIK floating bar (biar keliatan efek
+          // blur/glass-nya kayak di home).
+          Positioned.fill(
+            child: _buildBody(contentTopPadding),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: TextField(
-              controller: _controller,
-              autofocus: true,
-              onChanged: _onQueryChanged,
-              style: AppText.cardTitle,
-              cursorColor: AppColors.accent,
-              decoration: const InputDecoration(
-                isDense: true,
-                border: InputBorder.none,
-                hintText: 'Cari judul anime...',
-                hintStyle: AppText.cardSubtitle,
-              ),
+
+          // Floating back button + search bar.
+          Positioned(
+            top: topPadding + _barTopMargin,
+            left: 16,
+            right: 16,
+            height: _barHeight,
+            child: Row(
+              children: [
+                _FloatingGlassButton(
+                  size: _barHeight,
+                  onTap: () => Navigator.of(context).pop(),
+                  child: const Icon(
+                    CupertinoIcons.back,
+                    color: AppColors.textPrimary,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Hero(
+                    tag: 'anichin-search-bar',
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: _FloatingSearchField(
+                        height: _barHeight,
+                        controller: _controller,
+                        onChanged: _onQueryChanged,
+                        onClear: _clear,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          if (_controller.text.isNotEmpty)
-            GestureDetector(
-              onTap: _clear,
-              behavior: HitTestBehavior.opaque,
-              child: const Icon(
-                CupertinoIcons.clear_circled_solid,
-                size: 18,
-                color: AppColors.textTertiary,
-              ),
-            ),
         ],
       ),
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(double contentTopPadding) {
     if (!_hasSearched) {
-      return const _MessageState(
+      return _MessageState(
         icon: CupertinoIcons.search,
         title: 'Cari anime favorit lu',
         subtitle: 'Ketik judulnya di kolom pencarian di atas.',
+        topPadding: contentTopPadding,
       );
     }
 
     if (_loading) {
-      return const Center(
-        child: CupertinoActivityIndicator(
-          radius: 16,
-          color: AppColors.textSecondary,
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.only(top: contentTopPadding),
+          child: const CupertinoActivityIndicator(
+            radius: 16,
+            color: AppColors.textSecondary,
+          ),
         ),
       );
     }
@@ -227,25 +230,37 @@ class _SearchScreenState extends State<SearchScreen> {
         title: 'Gagal memuat data',
         subtitle: _error!,
         onRetry: () => _search(_lastQuery),
+        topPadding: contentTopPadding,
       );
     }
 
     if (_results.isEmpty) {
-      return const _MessageState(
+      return _MessageState(
         icon: CupertinoIcons.doc_text_search,
         title: 'Gak ketemu',
         subtitle: 'Coba kata kunci lain, mungkin ada typo.',
+        topPadding: contentTopPadding,
       );
     }
 
+    const crossAxisCount = 3;
+    const crossAxisSpacing = 12.0;
+
     return GridView.builder(
       controller: _scrollController,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
+      padding: EdgeInsets.fromLTRB(20, contentTopPadding, 20, 32),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
         mainAxisSpacing: 18,
-        crossAxisSpacing: 12,
-        childAspectRatio: 0.56,
+        crossAxisSpacing: crossAxisSpacing,
+        // Dihitung dinamis biar poster + judul 2 baris + subtitle SELALU
+        // muat di dalam cell, gak numpuk ke row bawahnya.
+        childAspectRatio: AnimeCardWidget.gridAspectRatio(
+          context,
+          crossAxisCount: crossAxisCount,
+          crossAxisSpacing: crossAxisSpacing,
+          horizontalPadding: 40,
+        ),
       ),
       itemCount: _results.length + (_hasNextPage ? 1 : 0),
       itemBuilder: (context, index) {
@@ -278,18 +293,156 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
-/// State generik buat kondisi kosong/awal/error, biar konsisten sama
-/// tampilan _ErrorState di screen lain.
+/// Tombol bulat gaya "glass" (blur + surface transparan), dipakai buat
+/// tombol back floating — biar konsisten sama estetika PillHeaderDelegate
+/// di home.
+class _FloatingGlassButton extends StatelessWidget {
+  final double size;
+  final VoidCallback onTap;
+  final Widget child;
+
+  const _FloatingGlassButton({
+    required this.size,
+    required this.onTap,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.35),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: ClipOval(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.surface.withOpacity(0.75),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withOpacity(0.08)),
+              ),
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Search field floating gaya "glass", dipakai buat Hero target dari home.
+class _FloatingSearchField extends StatelessWidget {
+  final double height;
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+  final VoidCallback onClear;
+
+  const _FloatingSearchField({
+    required this.height,
+    required this.controller,
+    required this.onChanged,
+    required this.onClear,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(height / 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.35),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(height / 2),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: AppColors.surface.withOpacity(0.75),
+              borderRadius: BorderRadius.circular(height / 2),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  CupertinoIcons.search,
+                  size: 18,
+                  color: AppColors.accent,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    autofocus: true,
+                    onChanged: onChanged,
+                    style: AppText.cardTitle,
+                    cursorColor: AppColors.accent,
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      border: InputBorder.none,
+                      hintText: 'Cari judul anime...',
+                      hintStyle: AppText.cardSubtitle,
+                    ),
+                  ),
+                ),
+                ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: controller,
+                  builder: (context, value, _) {
+                    if (value.text.isEmpty) return const SizedBox.shrink();
+                    return GestureDetector(
+                      onTap: onClear,
+                      behavior: HitTestBehavior.opaque,
+                      child: const Icon(
+                        CupertinoIcons.clear_circled_solid,
+                        size: 18,
+                        color: AppColors.textTertiary,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// State generik buat kondisi kosong/awal/error.
 class _MessageState extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback? onRetry;
+  final double topPadding;
 
   const _MessageState({
     required this.icon,
     required this.title,
     required this.subtitle,
+    required this.topPadding,
     this.onRetry,
   });
 
@@ -297,7 +450,7 @@ class _MessageState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: EdgeInsets.fromLTRB(32, topPadding, 32, 32),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
