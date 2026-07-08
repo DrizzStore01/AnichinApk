@@ -22,6 +22,10 @@ class _HomeScreenState extends State<HomeScreen> {
   final ApiService _apiService = ApiService();
   late Future<HomeData> _futureHome;
 
+  // True kalau lagi discroll (drag/fling), dipakai buat nyusutin pill
+  // header ke kiri. Balik false pas scroll-nya berhenti.
+  bool _isHeaderCompact = false;
+
   @override
   void initState() {
     super.initState();
@@ -34,84 +38,148 @@ class _HomeScreenState extends State<HomeScreen> {
     await future;
   }
 
+  bool _onScrollNotification(ScrollNotification notification) {
+    if (notification is ScrollStartNotification) {
+      if (!_isHeaderCompact) setState(() => _isHeaderCompact = true);
+    } else if (notification is ScrollEndNotification) {
+      if (_isHeaderCompact) setState(() => _isHeaderCompact = false);
+    }
+    // return false biar notification tetep diteruskan (misal ke
+    // CupertinoSliverRefreshControl / ancestor lain yang butuh).
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: FutureBuilder<HomeData>(
-        future: _futureHome,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const _LoadingState();
-          }
+      body: NotificationListener<ScrollNotification>(
+        onNotification: _onScrollNotification,
+        child: FutureBuilder<HomeData>(
+          future: _futureHome,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const _LoadingState();
+            }
 
-          if (snapshot.hasError) {
-            return _ErrorState(
-              message: '${snapshot.error}',
-              onRetry: _refresh,
-            );
-          }
+            if (snapshot.hasError) {
+              return _ErrorState(
+                message: '${snapshot.error}',
+                onRetry: _refresh,
+              );
+            }
 
-          final data = snapshot.data!;
+            final data = snapshot.data!;
 
-          return CustomScrollView(
-            physics: const BouncingScrollPhysics(
-              parent: AlwaysScrollableScrollPhysics(),
-            ),
-            slivers: [
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: PillHeaderDelegate(
-                  topPadding: MediaQuery.of(context).padding.top,
-                  onSearchTap: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const SearchScreen()),
-                    );
-                  },
-                ),
+            return CustomScrollView(
+              physics: const BouncingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
               ),
-              CupertinoSliverRefreshControl(onRefresh: _refresh),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: FeaturedSlider(
-                    items: data.featuredSlider,
-                    onTap: (item) {
+              slivers: [
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: PillHeaderDelegate(
+                    topPadding: MediaQuery.of(context).padding.top,
+                    isCompact: _isHeaderCompact,
+                    onSearchTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => DetailScreen(animeUrl: item.url),
-                        ),
+                            builder: (_) => const SearchScreen()),
                       );
                     },
                   ),
                 ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 28),
-                  child: SectionHeader(
-                    title: 'Popular Today',
-                    onSeeAll: () {
-                      // TODO: navigate ke halaman list lengkap
-                    },
+                CupertinoSliverRefreshControl(onRefresh: _refresh),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: FeaturedSlider(
+                      items: data.featuredSlider,
+                      onTap: (item) {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => DetailScreen(animeUrl: item.url),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ),
-              ),
-              SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 200,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    itemCount: data.popularToday.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 14),
-                    itemBuilder: (context, index) {
-                      final anime = data.popularToday[index];
-                      return SizedBox(
-                        width: 128,
-                        child: AnimeCardWidget(
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 28),
+                    child: SectionHeader(
+                      title: 'Popular Today',
+                      onSeeAll: () {
+                        // TODO: navigate ke halaman list lengkap
+                      },
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 200,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      itemCount: data.popularToday.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 14),
+                      itemBuilder: (context, index) {
+                        final anime = data.popularToday[index];
+                        return SizedBox(
+                          width: 128,
+                          child: AnimeCardWidget(
+                            anime: anime,
+                            titleInsideCard: true,
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      WatchScreen(episodeUrl: anime.url),
+                                ),
+                              );
+                            },
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 24),
+                    child: SectionHeader(
+                      title: 'Latest Releases',
+                      onSeeAll: () {
+                        // TODO: navigate ke halaman list lengkap
+                      },
+                    ),
+                  ),
+                ),
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+                  sliver: SliverGrid(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 3,
+                      mainAxisSpacing: 18,
+                      crossAxisSpacing: 12,
+                      // Dihitung dinamis (bukan angka hardcode) biar tinggi
+                      // cell SELALU muat poster + judul 2 baris + subtitle,
+                      // gak peduli seberapa lebar layarnya. Kalau
+                      // childAspectRatio-nya kekecilan tinggi (angka gede),
+                      // teksnya numpuk ke row di bawahnya.
+                      childAspectRatio: AnimeCardWidget.gridAspectRatio(
+                        context,
+                        crossAxisCount: 3,
+                        crossAxisSpacing: 12,
+                        horizontalPadding: 40,
+                      ),
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final anime = data.latestReleases[index];
+                        return AnimeCardWidget(
                           anime: anime,
-                          titleInsideCard: true,
                           onTap: () {
                             Navigator.of(context).push(
                               MaterialPageRoute(
@@ -120,64 +188,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             );
                           },
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 24),
-                  child: SectionHeader(
-                    title: 'Latest Releases',
-                    onSeeAll: () {
-                      // TODO: navigate ke halaman list lengkap
-                    },
-                  ),
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-                sliver: SliverGrid(
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    mainAxisSpacing: 18,
-                    crossAxisSpacing: 12,
-                    // Dihitung dinamis (bukan angka hardcode) biar tinggi
-                    // cell SELALU muat poster + judul 2 baris + subtitle,
-                    // gak peduli seberapa lebar layarnya. Kalau
-                    // childAspectRatio-nya kekecilan tinggi (angka gede),
-                    // teksnya numpuk ke row di bawahnya.
-                    childAspectRatio: AnimeCardWidget.gridAspectRatio(
-                      context,
-                      crossAxisCount: 3,
-                      crossAxisSpacing: 12,
-                      horizontalPadding: 40,
+                        );
+                      },
+                      childCount: data.latestReleases.length,
                     ),
                   ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final anime = data.latestReleases[index];
-                      return AnimeCardWidget(
-                        anime: anime,
-                        onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  WatchScreen(episodeUrl: anime.url),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                    childCount: data.latestReleases.length,
-                  ),
                 ),
-              ),
-            ],
-          );
-        },
+              ],
+            );
+          },
+        ),
       ),
     );
   }
