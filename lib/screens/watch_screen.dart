@@ -1,4 +1,5 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -71,24 +72,31 @@ class _WatchScreenState extends State<WatchScreen> {
     });
 
     if (OkRuExtractor.isOkRuLink(server.link)) {
-      String? directUrl;
+      OkRuStream? stream;
       try {
-        directUrl = await OkRuExtractor.extractDirectUrl(server.link);
-      } catch (_) {
-        directUrl = null;
+        stream = await OkRuExtractor.extractDirectUrl(server.link);
+      } catch (e) {
+        debugPrint('[Watch] extractDirectUrl throw exception: $e');
+        stream = null;
       }
 
       // Kalau user udah pindah server lagi sebelum extract selesai, batalin.
       if (_loadedLink != server.link || !mounted) return;
 
-      if (directUrl != null) {
+      if (stream != null) {
         _disposeNativePlayer();
+        // PENTING: httpHeaders wajib dikirim juga pas request video/manifest
+        // -nya (bukan cuma pas ambil embed page). Tanpa Referer & User-Agent
+        // yang bener, CDN OK.ru nolak request-nya (403) dan initialize()
+        // bakal gagal walau url-nya sendiri valid.
         final controller = VideoPlayerController.networkUrl(
-          Uri.parse(directUrl),
+          Uri.parse(stream.url),
+          httpHeaders: stream.headers,
         );
         try {
           await controller.initialize();
-        } catch (_) {
+        } catch (e) {
+          debugPrint('[Watch] native player initialize() gagal: $e');
           controller.dispose();
           _loadWebView(server.link);
           return;

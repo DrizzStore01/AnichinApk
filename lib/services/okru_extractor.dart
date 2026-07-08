@@ -2,6 +2,17 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+/// Hasil extract: url video/manifest + header yang WAJIB dibawa pas muter
+/// videonya (bukan cuma pas ambil embed page-nya doang). CDN OK.ru punya
+/// proteksi hotlink — kalau request video/manifest-nya gak bawa Referer &
+/// User-Agent yang bener, CDN bakal nolak (403) walau url-nya valid.
+class OkRuStream {
+  final String url;
+  final Map<String, String> headers;
+
+  OkRuStream({required this.url, required this.headers});
+}
+
 /// Extractor khusus buat embed OK.ru (odnoklassniki).
 ///
 /// Halaman embed OK.ru (`https://ok.ru/videoembed/<id>`) itu sebenernya nyimpen
@@ -20,12 +31,13 @@ class OkRuExtractor {
 
   static bool isOkRuLink(String url) => url.contains('ok.ru');
 
-  /// Balikin direct url video (m3u8 kalau ada, kalau enggak ambil salah satu
-  /// kualitas dari `videos`). Balikin null kalau gagal di-extract.
+  /// Balikin [OkRuStream] (url + header wajib) — m3u8 kalau ada, kalau enggak
+  /// ambil salah satu kualitas dari `videos`. Balikin null kalau gagal
+  /// di-extract.
   ///
   /// Tiap langkah di-log pake debugPrint (prefix "[OkRu]"), keliatan di
   /// console `flutter run` buat gampang nge-debug kalau ada yang gagal.
-  static Future<String?> extractDirectUrl(String embedUrl) async {
+  static Future<OkRuStream?> extractDirectUrl(String embedUrl) async {
     final videoId = RegExp(r'(\d[\d-]*)/?$').firstMatch(embedUrl)?.group(1);
     if (videoId == null) {
       debugPrint('[OkRu] gagal ambil videoId dari url: $embedUrl');
@@ -50,6 +62,21 @@ class OkRuExtractor {
     if (response.statusCode != 200) {
       debugPrint('[OkRu] statusCode bukan 200, berhenti di sini.');
       return null;
+    }
+
+    // Header ini WAJIB dibawa lagi pas request video/manifest-nya (bukan
+    // cuma pas ambil HTML embed page). Tanpa ini, CDN OK.ru sering nolak
+    // (403) walau url video-nya sendiri valid.
+    final playbackHeaders = <String, String>{
+      'User-Agent': _userAgent,
+      'Referer': 'https://ok.ru/',
+    };
+    final setCookie = response.headers['set-cookie'];
+    if (setCookie != null && setCookie.isNotEmpty) {
+      // Ambil cuma nama=value-nya (bagian sebelum ';' pertama tiap cookie).
+      playbackHeaders['Cookie'] = setCookie.split(',').map((c) {
+        return c.split(';').first.trim();
+      }).join('; ');
     }
 
     final html = response.body;
@@ -119,7 +146,7 @@ class OkRuExtractor {
     final hlsUrl = metadata['hlsManifestUrl'];
     if (hlsUrl is String && hlsUrl.isNotEmpty) {
       debugPrint('[OkRu] hlsManifestUrl ketemu: $hlsUrl');
-      return hlsUrl;
+      return OkRuStream(url: hlsUrl, headers: playbackHeaders);
     }
 
     final videos = (metadata['videos'] as List?) ?? [];
@@ -135,7 +162,7 @@ class OkRuExtractor {
           );
       if (match != null && match['url'] is String) {
         debugPrint('[OkRu] pakai kualitas "$name": ${match['url']}');
-        return match['url'] as String;
+        return OkRuStream(url: match['url'] as String, headers: playbackHeaders);
       }
     }
 
@@ -144,7 +171,9 @@ class OkRuExtractor {
     final fallbackUrl =
         fallback is Map && fallback['url'] is String ? fallback['url'] as String : null;
     debugPrint('[OkRu] pakai fallback video terakhir: $fallbackUrl');
-    return fallbackUrl;
+    return fallbackUrl != null
+        ? OkRuStream(url: fallbackUrl, headers: playbackHeaders)
+        : null;
   }
 
   static String _htmlUnescape(String s) {
