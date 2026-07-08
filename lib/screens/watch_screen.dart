@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -188,29 +189,15 @@ class _WatchScreenState extends State<WatchScreen> {
       allowFullScreen: true,
       // Layar gak mati sendiri pas lagi nonton.
       allowedScreenSleep: false,
-      materialProgressColors: ChewieProgressColors(
-        playedColor: AppColors.accent,
-        handleColor: AppColors.accent,
-        bufferedColor: Colors.white24,
+      showControls: true,
+      // Custom controls sendiri (bukan bawaan Chewie) biar tampilannya
+      // lebih niat: tombol play besar di tengah, seek ±10 detik, progress
+      // bar custom, fullscreen toggle, double-tap buat seek, auto-hide.
+      customControls: _CustomPlayerControls(
+        qualities: _qualities,
+        currentQuality: _currentQuality,
+        onQualityTap: _showQualityPicker,
       ),
-      optionsTranslation: OptionsTranslation(
-        playbackSpeedButtonText: 'Kecepatan Putar',
-        subtitlesButtonText: 'Subtitle',
-        cancelButtonText: 'Batal',
-      ),
-      additionalOptions: (context) {
-        if (_qualities.length <= 1) return [];
-        return [
-          OptionItem(
-            onTap: (ctx) {
-              Navigator.of(ctx).pop();
-              _showQualityPicker();
-            },
-            iconData: Icons.high_quality_outlined,
-            title: 'Kualitas (${_currentQuality?.label ?? '-'})',
-          ),
-        ];
-      },
       errorBuilder: (context, errorMessage) {
         return Container(
           color: Colors.black,
@@ -318,20 +305,7 @@ class _WatchScreenState extends State<WatchScreen> {
     }
 
     if (_isNative && _chewieController != null) {
-      return Stack(
-        children: [
-          Positioned.fill(child: Chewie(controller: _chewieController!)),
-          if (_qualities.length > 1)
-            Positioned(
-              top: 10,
-              right: 10,
-              child: _QualityChip(
-                label: _currentQuality?.label ?? '',
-                onTap: _showQualityPicker,
-              ),
-            ),
-        ],
-      );
+      return Chewie(controller: _chewieController!);
     }
 
     if (_playerController != null) {
@@ -670,44 +644,348 @@ class _DownloadTile extends StatelessWidget {
   }
 }
 
-class _QualityChip extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
+/// Custom controls buat Chewie — ganti total tampilan bawaan Chewie biar
+/// keliatan lebih niat: tombol play/pause besar di tengah, skip ±10 detik,
+/// progress bar custom, tombol fullscreen, chip kualitas, double-tap kiri
+/// /kanan buat seek, dan auto-hide kontrol pas lagi muter.
+class _CustomPlayerControls extends StatefulWidget {
+  final List<OkRuQuality> qualities;
+  final OkRuQuality? currentQuality;
+  final VoidCallback onQualityTap;
 
-  const _QualityChip({required this.label, required this.onTap});
+  const _CustomPlayerControls({
+    required this.qualities,
+    required this.currentQuality,
+    required this.onQualityTap,
+  });
+
+  @override
+  State<_CustomPlayerControls> createState() => _CustomPlayerControlsState();
+}
+
+class _CustomPlayerControlsState extends State<_CustomPlayerControls> {
+  bool _visible = true;
+  Timer? _hideTimer;
+
+  bool _showSeekBubbleLeft = false;
+  bool _showSeekBubbleRight = false;
+  Timer? _seekBubbleTimer;
+
+  ChewieController get _chewie => ChewieController.of(context);
+  VideoPlayerController get _video => _chewie.videoPlayerController;
+
+  @override
+  void initState() {
+    super.initState();
+    _video.addListener(_onVideoTick);
+    _scheduleHide();
+  }
+
+  @override
+  void dispose() {
+    _video.removeListener(_onVideoTick);
+    _hideTimer?.cancel();
+    _seekBubbleTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onVideoTick() {
+    if (mounted) setState(() {});
+  }
+
+  void _scheduleHide() {
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted && _video.value.isPlaying) {
+        setState(() => _visible = false);
+      }
+    });
+  }
+
+  void _toggleVisible() {
+    setState(() => _visible = !_visible);
+    if (_visible) _scheduleHide();
+  }
+
+  void _togglePlay() {
+    if (_video.value.isPlaying) {
+      _video.pause();
+      _hideTimer?.cancel();
+    } else {
+      _video.play();
+      _scheduleHide();
+    }
+    setState(() {});
+  }
+
+  void _seekBy(Duration offset) {
+    final pos = _video.value.position + offset;
+    final dur = _video.value.duration;
+    final target =
+        pos < Duration.zero ? Duration.zero : (pos > dur ? dur : pos);
+    _video.seekTo(target);
+  }
+
+  void _handleDoubleTap(TapDownDetails details, double width) {
+    final isLeft = details.localPosition.dx < width / 2;
+    _seekBy(Duration(seconds: isLeft ? -10 : 10));
+
+    setState(() {
+      _showSeekBubbleLeft = isLeft;
+      _showSeekBubbleRight = !isLeft;
+    });
+    _seekBubbleTimer?.cancel();
+    _seekBubbleTimer = Timer(const Duration(milliseconds: 500), () {
+      if (!mounted) return;
+      setState(() {
+        _showSeekBubbleLeft = false;
+        _showSeekBubbleRight = false;
+      });
+    });
+  }
+
+  String _fmt(Duration d) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60);
+    return h > 0 ? '$h:${two(m)}:${two(s)}' : '${two(m)}:${two(s)}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final value = _video.value;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _toggleVisible,
+          onDoubleTapDown: (d) => _handleDoubleTap(d, constraints.maxWidth),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (value.isBuffering)
+                const Center(
+                  child: CupertinoActivityIndicator(
+                    color: Colors.white,
+                    radius: 14,
+                  ),
+                ),
+              if (_showSeekBubbleLeft)
+                const Align(
+                  alignment: Alignment(-0.5, 0),
+                  child: _SeekBubble(icon: CupertinoIcons.gobackward_10),
+                ),
+              if (_showSeekBubbleRight)
+                const Align(
+                  alignment: Alignment(0.5, 0),
+                  child: _SeekBubble(icon: CupertinoIcons.goforward_10),
+                ),
+              AnimatedOpacity(
+                opacity: _visible ? 1 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: IgnorePointer(
+                  ignoring: !_visible,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.black.withOpacity(0.55),
+                          Colors.transparent,
+                          Colors.transparent,
+                          Colors.black.withOpacity(0.65),
+                        ],
+                        stops: const [0, 0.25, 0.7, 1],
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 8, 12, 0),
+                          child: Row(
+                            children: [
+                              if (_chewie.isFullScreen)
+                                IconButton(
+                                  icon: const Icon(
+                                    CupertinoIcons.chevron_back,
+                                    color: Colors.white,
+                                  ),
+                                  onPressed: _chewie.toggleFullScreen,
+                                ),
+                              const Spacer(),
+                              if (widget.qualities.length > 1)
+                                GestureDetector(
+                                  onTap: widget.onQualityTap,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.4),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: Colors.white24,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          widget.currentQuality?.label ?? '',
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+                                        const Icon(
+                                          CupertinoIcons.chevron_down,
+                                          size: 12,
+                                          color: Colors.white70,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        const Spacer(),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _CircleIconButton(
+                              icon: CupertinoIcons.gobackward_10,
+                              onTap: () =>
+                                  _seekBy(const Duration(seconds: -10)),
+                            ),
+                            const SizedBox(width: 34),
+                            _CircleIconButton(
+                              icon: value.isPlaying
+                                  ? CupertinoIcons.pause_fill
+                                  : CupertinoIcons.play_fill,
+                              size: 56,
+                              iconSize: 28,
+                              onTap: _togglePlay,
+                            ),
+                            const SizedBox(width: 34),
+                            _CircleIconButton(
+                              icon: CupertinoIcons.goforward_10,
+                              onTap: () =>
+                                  _seekBy(const Duration(seconds: 10)),
+                            ),
+                          ],
+                        ),
+                        const Spacer(),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                          child: Row(
+                            children: [
+                              Text(
+                                _fmt(value.position),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: VideoProgressIndicator(
+                                  _video,
+                                  allowScrubbing: true,
+                                  padding: EdgeInsets.zero,
+                                  colors: VideoProgressColors(
+                                    playedColor: AppColors.accent,
+                                    bufferedColor: Colors.white38,
+                                    backgroundColor: Colors.white12,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _fmt(value.duration),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: _chewie.toggleFullScreen,
+                                child: Icon(
+                                  _chewie.isFullScreen
+                                      ? CupertinoIcons.fullscreen_exit
+                                      : CupertinoIcons.fullscreen,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _CircleIconButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  final double size;
+  final double iconSize;
+
+  const _CircleIconButton({
+    required this.icon,
+    required this.onTap,
+    this.size = 44,
+    this.iconSize = 22,
+  });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        width: size,
+        height: size,
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.55),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withOpacity(0.15)),
+          shape: BoxShape.circle,
+          color: Colors.black.withOpacity(0.4),
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(width: 4),
-            const Icon(
-              CupertinoIcons.chevron_down,
-              size: 12,
-              color: Colors.white70,
-            ),
-          ],
-        ),
+        child: Icon(icon, color: Colors.white, size: iconSize),
       ),
+    );
+  }
+}
+
+class _SeekBubble extends StatelessWidget {
+  final IconData icon;
+
+  const _SeekBubble({required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 64,
+      height: 64,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.black.withOpacity(0.5),
+      ),
+      child: Icon(icon, color: Colors.white, size: 30),
     );
   }
 }

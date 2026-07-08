@@ -164,21 +164,34 @@ class OkRuExtractor {
     final hlsUrl = metadata['hlsManifestUrl'];
     if (hlsUrl is String && hlsUrl.isNotEmpty) {
       debugPrint('[OkRu] hlsManifestUrl ketemu: $hlsUrl');
-      qualities.add(OkRuQuality(label: 'Auto (HLS)', url: hlsUrl));
+      qualities.add(OkRuQuality(label: 'Auto', url: hlsUrl));
     }
 
     final videos = (metadata['videos'] as List?) ?? [];
     debugPrint('[OkRu] jumlah videos (mp4): ${videos.length}');
 
     // Urutan kualitas dari yang paling bagus, sesuai nama yang dipake OK.ru.
-    const preferredOrder = ['full', 'hd', 'sd', 'low', 'lowest', 'mobile'];
+    // Label-nya dibikin ala YouTube (angka resolusi), bukan nama internal
+    // OK.ru — approx mapping yang umum dipakai extractor OK.ru lain.
+    const preferredOrder = [
+      'ultra',
+      'quad',
+      'full',
+      'hd',
+      'sd',
+      'low',
+      'lowest',
+      'mobile',
+    ];
     const labels = {
-      'full': 'Full HD',
-      'hd': 'HD',
-      'sd': 'SD',
-      'low': 'Rendah',
-      'lowest': 'Terendah',
-      'mobile': 'Mobile',
+      'ultra': '2160p',
+      'quad': '1440p',
+      'full': '1080p',
+      'hd': '720p',
+      'sd': '480p',
+      'low': '360p',
+      'lowest': '240p',
+      'mobile': '144p',
     };
 
     for (final name in preferredOrder) {
